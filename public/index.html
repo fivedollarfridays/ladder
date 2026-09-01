@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ladder — a question deck an agent can't bluff past</title>
+<style>
+  :root{--bg:#0F0E10;--surface:#1A181C;--edge:#2B272F;--fg:#F2EFEA;--muted:#8E8791;--accent:#C21E2C;--ok:#8CC63F}
+  @media (prefers-color-scheme:light){:root{--bg:#F7F5F3;--surface:#fff;--edge:#E2DDE4;--fg:#17151A;--muted:#6B6470}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);line-height:1.5;
+    font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  main{max-width:52rem;margin:0 auto;padding:2.5rem 1.25rem 5rem}
+  h1{font-size:1.9rem;margin:0 0 .3rem;letter-spacing:-.02em}
+  .sub{color:var(--muted);margin:0 0 .4rem}
+  .status{display:inline-block;padding:.3rem .7rem;border-radius:2rem;font-size:.8rem;
+    font-weight:700;border:1px solid var(--edge);margin:.9rem 0 1.8rem}
+  h2{font-size:.78rem;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);
+    margin:2.2rem 0 .7rem;font-weight:700}
+  .card{background:var(--surface);border:1px solid var(--edge);border-radius:.6rem;
+    padding:1rem 1.1rem;margin-bottom:.7rem}
+  .tool{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:700;color:var(--accent)}
+  .rungs{display:grid;grid-template-columns:repeat(auto-fit,minmax(5.2rem,1fr));gap:.5rem;margin:.6rem 0 0}
+  .rung{border:1px solid var(--edge);border-radius:.45rem;padding:.55rem;text-align:center}
+  .rung b{display:block;font-size:1.3rem;font-variant-numeric:tabular-nums}
+  .rung span{font-size:.7rem;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+  .rung.dry{border-color:var(--accent);color:var(--accent)}
+  pre{background:var(--surface);border:1px solid var(--edge);border-radius:.5rem;
+    padding:.85rem;overflow-x:auto;font-size:.82rem;margin:.5rem 0 0}
+  button{font:inherit;font-weight:650;padding:.5rem 1rem;border-radius:.45rem;
+    border:1px solid var(--edge);background:var(--surface);color:inherit;cursor:pointer}
+  button:hover{border-color:var(--accent);color:var(--accent)}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.86em}
+  .muted{color:var(--muted);font-size:.86rem}
+</style>
+</head>
+<body>
+<main>
+  <h1>Ladder</h1>
+  <p class="sub">A tiered question deck that an agent can read, search, and build from &mdash;
+     but <strong>cannot bluff past</strong>.</p>
+  <div class="status" id="status">checking for WebMCP&hellip;</div>
+
+  <div class="card">
+    <p style="margin:0 0 .4rem">The deck is finite and it remembers. Every question is either
+    <em>available</em>, <em>reserved</em> (asked on camera, not yet locked), or <em>burned</em>.
+    An agent building a set has to work inside that, one question per difficulty rung, and it
+    is told <strong>no</strong> when a rung has run dry rather than inventing something.</p>
+    <p class="muted" style="margin:0">That constraint is the point. A generative model asked for
+    five quiz questions will happily produce five it has already produced. This deck won't let it.</p>
+  </div>
+
+  <h2>What's left, right now</h2>
+  <div class="card">
+    <div class="rungs" id="rungs"><span class="muted">loading&hellip;</span></div>
+    <p class="muted" id="totals" style="margin:.8rem 0 0"></p>
+  </div>
+
+  <h2>Tools exposed to the agent</h2>
+  <div class="card"><span class="tool">deck_report</span> &mdash; what remains, per rung, and which rungs are exhausted.</div>
+  <div class="card"><span class="tool">theme_search</span> &mdash; deck coverage for a theme, and which rungs it can't cover.</div>
+  <div class="card"><span class="tool">build_set</span> &mdash; a full set from a spec. Deterministic. Refuses to under-fill.</div>
+  <div class="card"><span class="tool">screen_candidates</span> &mdash; would any of these repeat something already used?</div>
+
+  <h2>Try it without an agent</h2>
+  <div class="card">
+    <button id="demo">Build a dog-themed set</button>
+    <pre id="out">&mdash;</pre>
+  </div>
+
+  <p class="muted" style="margin-top:2.5rem">
+    Open in a WebMCP-enabled browser and ask the agent to build you a set.
+    Same four operations either way &mdash; the page is a thin client over the
+    same HTTP API, so there is no agent-only back door.
+  </p>
+</main>
+
+<script>
+const API = "/api";
+
+async function call(op, {body, params} = {}) {
+  const qs = new URLSearchParams({op, ...(params || {})});
+  const res = await fetch(`${API}?${qs}`, body
+    ? {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)}
+    : {method: "GET"});
+  return res.json();
+}
+
+const TIER_LABEL = {1: "$1", 2: "$5", 3: "$10", 4: "$20", 5: "$50", DoN: "double"};
+
+async function paintReport() {
+  const r = await call("report");
+  const dry = new Set(r.exhausted_tiers || []);
+  document.getElementById("rungs").innerHTML = Object.entries(r.by_tier)
+    .map(([tier, n]) =>
+      `<div class="rung${dry.has(tier) ? " dry" : ""}"><b>${n}</b><span>tier ${tier}</span></div>`)
+    .join("");
+  document.getElementById("totals").textContent =
+    `${r.available} available of ${r.deck_size} · ${r.spent} spent` +
+    (r.exhausted_tiers.length ? ` · EXHAUSTED: ${r.exhausted_tiers.join(", ")}` : " · every rung has options");
+}
+
+document.getElementById("demo").addEventListener("click", async () => {
+  const out = document.getElementById("out");
+  out.textContent = "building…";
+  const ep = await call("build", {body: {
+    episode: "demo", guest: "Demo Guest", themes: ["dog", "breed", "canine"]}});
+  out.textContent = ep.error
+    ? `${ep.error}: ${ep.detail}`
+    : ep.questions.map(q =>
+        `R${q.round}  ${q.category}\n     ${q.text}\n     → ${q.answer}`).join("\n\n");
+});
+
+// ── WebMCP ────────────────────────────────────────────────────────────────
+// Tools are the SAME four operations the HTTP API exposes. Deliberate: an agent
+// gets no capability a person with curl doesn't have, which keeps one
+// implementation honest instead of two drifting ones.
+const TOOLS = [
+  {
+    name: "deck_report",
+    description: "How many questions remain in the deck, broken down by difficulty rung, "
+      + "and which rungs are exhausted. Call this before building a set — a deck can be "
+      + "far from empty and still have nothing left at the rung you need.",
+    inputSchema: {type: "object", properties: {}},
+    run: () => call("report")
+  },
+  {
+    name: "theme_search",
+    description: "Which available questions match a theme, grouped by rung, plus which rungs "
+      + "the theme cannot cover at all. Use this to find out how much has to be written by "
+      + "hand before committing to a themed episode.",
+    inputSchema: {
+      type: "object",
+      properties: {terms: {type: "array", items: {type: "string"},
+        description: "Theme terms, most important first — order decides ranking."}},
+      required: ["terms"]
+    },
+    run: (a) => call("theme", {params: {terms: (a.terms || []).join(",")}})
+  },
+  {
+    name: "build_set",
+    description: "Build a complete set — one question per rung — from a spec. Deterministic: "
+      + "the same spec and ledger always produce the same set. Never picks a question already "
+      + "reserved or burned. Fails loudly with the rung numbers if it cannot fill one, rather "
+      + "than returning a short set.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        episode: {type: "string", description: "Slug for this episode."},
+        guest: {type: "string"},
+        themes: {type: "array", items: {type: "string"},
+          description: "Ordered — the earliest matching term wins."},
+        themes_by_round: {type: "object",
+          description: "Per-rung theme overrides, e.g. {\"3\": [\"history\"]}."},
+        difficulty_by_round: {type: "object",
+          description: "Per-rung difficulty overrides for an expert guest."},
+        exclude: {type: "array", items: {type: "string"},
+          description: "Deck ids to skip for this guest WITHOUT spending them."},
+        authored: {type: "array", items: {type: "object"},
+          description: "Hand-written questions pinned to a rung."}
+      },
+      required: ["episode", "guest"]
+    },
+    run: (a) => call("build", {body: a})
+  },
+  {
+    name: "screen_candidates",
+    description: "Check proposed questions against everything already reserved or burned. "
+      + "An empty collision list is the only acceptable result before recording.",
+    inputSchema: {
+      type: "object",
+      properties: {candidates: {type: "array", items: {type: "string"}}},
+      required: ["candidates"]
+    },
+    run: (a) => call("screen", {body: {candidates: a.candidates || []}})
+  }
+];
+
+async function registerWebMCP() {
+  const el = document.getElementById("status");
+  const ctx = window.document.modelContext;
+  if (!ctx || typeof ctx.registerTool !== "function") {
+    el.textContent = "WebMCP not detected — the page works on its own, tools appear when an agent is present";
+    el.style.borderColor = "var(--edge)";
+    return;
+  }
+  for (const t of TOOLS) {
+    await ctx.registerTool({
+      name: t.name,
+      description: t.description,
+      inputSchema: t.inputSchema,
+      async execute(args) {
+        const result = await t.run(args || {});
+        return {content: [{type: "text", text: JSON.stringify(result, null, 2)}]};
+      }
+    });
+  }
+  el.textContent = `WebMCP connected — ${TOOLS.length} tools registered`;
+  el.style.borderColor = "var(--ok)";
+  el.style.color = "var(--ok)";
+}
+
+paintReport();
+registerWebMCP();
+</script>
+</body>
+</html>

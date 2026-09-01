@@ -1,0 +1,105 @@
+# SAMPLE DECK — synthetic, written for this repo.
+#
+# FORMAT: a category line optionally carrying a difficulty digit 1-5 (or DoN for
+# a final all-or-nothing round), then the question, then either a plain answer or
+# a line of A-D options followed by an `ANSWER:` line marking the correct one.
+#
+# Bracketed text in a category is stage direction and is stripped.
+
+Small Package 1
+The smallest dog breed recognised by the AKC is named after a Mexican state. Which breed?
+A. Pomeranian B. Chihuahua C. Maltese D. Papillon
+ANSWER: B. Chihuahua
+
+Nose Knows 1
+A dog's nose print is unique to that dog, the same way this is unique to a person.
+A fingerprint
+
+Say My Name 1
+In hip hop, "MC" stands for what?
+A. Music Creator B. Master of Ceremonies C. Microphone Check D. Main Chorus
+ANSWER: B. Master of Ceremonies
+
+Neat Freak 1
+If you order a spirit "neat", what are you telling the bartender not to add?
+Anything at all - no ice, no mixer, no chill
+
+Proof Positive 2
+A spirit bottled at 40% ABV is how many proof in the United States?
+A. 40 B. 70 C. 80 D. 100
+ANSWER: C. 80
+
+Hot Dog 2
+"Dachshund" translates literally from German as this.
+Badger dog
+
+First Press 2
+This 1979 Sugarhill Gang single is generally credited as the first hip hop record to reach the Billboard Top 40.
+A. "The Message" B. "Planet Rock" C. "Rapper's Delight" D. "The Breaks"
+ANSWER: C. "Rapper's Delight"
+
+Equal Thirds 2 [bartender mimes a stir]
+A Negroni is equal parts gin, sweet vermouth, and this bitter red Italian aperitivo.
+A. Aperol B. Campari C. Cynar D. Fernet
+ANSWER: B. Campari
+
+Corn Law 3
+To be legally called bourbon, the mash bill must be at least what percentage corn?
+A. 33% B. 51% C. 75% D. 100%
+ANSWER: B. 51%
+
+Working Class 3
+The Border Collie is usually called the most intelligent breed. What job was it bred to do?
+Herd sheep
+
+Flower Power 3
+Orgeat is the almond syrup in a Mai Tai. Besides almond, which floral ingredient gives orgeat its aroma?
+A. Rose water B. Orange flower water C. Elderflower cordial D. Lavender extract
+ANSWER: B. Orange flower water
+
+Acronym 3
+The FBI programme that surveilled and disrupted civil rights groups from 1956 to 1971.
+A. COINTELPRO B. MK Ultra C. Operation CHAOS D. PRISM
+ANSWER: A. COINTELPRO
+
+Blue Bloods 4
+The Chow Chow and the Shar Pei both share this unusual physical trait.
+A. Webbed feet B. A blue-black tongue C. No tail D. Double dewclaws
+ANSWER: B. A blue-black tongue
+
+Named, Not Made 4
+Angostura bitters take their name from a town in which country? (It is produced in Trinidad.)
+A. Trinidad B. Venezuela C. Cuba D. Peru
+ANSWER: B. Venezuela
+
+Fourth Element 4
+Hip hop's four traditional elements are DJing, MCing, breaking, and this.
+A. Beatboxing B. Graffiti C. Sampling D. Fashion
+ANSWER: B. Graffiti
+
+Old Money 4
+Often called the oldest known dog breed and depicted in ancient Egyptian art, named for a Middle Eastern region.
+A. The Saluki B. The Basenji C. The Akita D. The Samoyed
+ANSWER: A. The Saluki
+
+Wood You Believe It 5
+The angel's share is the whiskey that evaporates from the barrel during ageing. What is the whiskey that soaks INTO the wood called?
+A. The cooper's cut B. The devil's cut C. The barrel share D. The stave loss
+ANSWER: B. The devil's cut
+
+Silent Type 5
+This central African breed physically cannot bark. Instead it yodels.
+A. The Shiba Inu B. The Basenji C. The Akita D. The Kuvasz
+ANSWER: B. The Basenji
+
+Founding Fathers DoN
+All three or nothing. Name the three DJs commonly credited as hip hop's founding trinity.
+DJ Kool Herc / Afrika Bambaataa / Grandmaster Flash
+
+Well Drinks DoN
+All five or nothing. Name the five base spirits a bartender builds a well from.
+Vodka, gin, rum, tequila, whiskey
+
+Good Dogs, All Of Them DoN
+All three or nothing. The first animal to orbit Earth, the breed whose German name means "badger dog", and the Swiss Alps rescue breed.
+Laika / Dachshund / St. Bernard

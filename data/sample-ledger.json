@@ -1,0 +1,33 @@
+{
+  "rule": "NO REPEATS with lock semantics: a question is SPENT (burned) only when its recording is LOCKED. Until then it is RESERVED under its pending episode - excluded from new builds, returned to the queue if that episode dies. States: available -> reserved -> burned.",
+  "episodes": [
+    {
+      "episode": "ep-001",
+      "guest": "Sample Guest A",
+      "shot": "2026-01-10",
+      "status": "burned",
+      "questions": [
+        {"round": 1, "text": "In hip hop, \"MC\" stands for what?"},
+        {"round": 3, "text": "To be legally called bourbon, the mash bill must be at least what percentage corn?"}
+      ]
+    },
+    {
+      "episode": "ep-002",
+      "guest": "Sample Guest B",
+      "shot": "2026-02-04",
+      "status": "reserved",
+      "questions": [
+        {"round": 4, "text": "The Chow Chow and the Shar Pei both share this unusual physical trait."}
+      ]
+    },
+    {
+      "episode": "ep-000",
+      "guest": "Sample Guest C",
+      "shot": "2025-06-01",
+      "status": "requeued-2026-01-01",
+      "questions": [
+        {"round": 2, "text": "\"Dachshund\" translates literally from German as this."}
+      ]
+    }
+  ]
+}
