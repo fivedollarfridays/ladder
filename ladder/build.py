@@ -1,26 +1,19 @@
 """Build an episode's question set from a spec — deterministically.
 
-Assembled by hand, a set has no record of why each question was chosen, and
-answers go unrecorded. This makes it tooling.
+Assembled by hand, a set has no record of why each question was chosen. This
+makes it tooling:
 
-WHAT MAKES IT TOOLING RATHER THAN A SCRIPT
-------------------------------------------
-**No randomness.** Candidates are ordered by (theme match, deck id) and the
-first is taken. Same spec + same ledger -> byte-identical set. Two people
-checking before a shoot see the same questions, and regenerating after the fact
-reproduces what was actually asked.
-
-**It cannot under-fill.** A rung with no candidate raises `UnfillableRung`
-naming the rungs, rather than emitting a short episode. A build error a week out
-is a scheduling problem; a missing question discovered on the day is not.
-
-**Provenance per row.** Every question records the deck id it came from, or
-`authored`. Supplementing is expected — no deck serves every theme at every
-rung — but the ledger must always be able to say which is which.
+**No randomness.** Same spec + same ledger -> byte-identical set.
+**It cannot under-fill.** An empty rung raises `UnfillableRung` naming the rung.
+**It cannot leak its own answer.** A category sharing a discriminating word with
+the correct option raises `CategoryLeak`.
+**Provenance per row.** Every question records its deck id, or `authored`.
 """
 
 
 from __future__ import annotations
+
+import re
 
 from ladder import pool as bq_pool
 
@@ -107,8 +100,61 @@ def theme_rank(question: dict, terms: list[str]) -> int | None:
     return None
 
 
-def _candidates(available: list[dict], round_no: int, used: set[str]) -> list[dict]:
-    band = RUNG_DIFFICULTY[round_no]
+class CategoryLeak(ValueError):
+    """The category gives away its own answer."""
+
+
+#: Too common to carry signal. Sharing "the" between a category and an answer
+#: means nothing; sharing "basenji" means everything.
+_LEAK_STOPWORDS = frozenset(
+    """a all an and are as at be but by do for from in is it its of on or that the
+    this to with you your three four five six""".split()
+)
+
+_WORD = re.compile(r"[a-z']+")
+
+
+def _words(text: str) -> set[str]:
+    return {w for w in _WORD.findall((text or "").lower()) if w not in _LEAK_STOPWORDS}
+
+
+def category_leak(question: dict) -> str | None:
+    """The category word that gives away the answer, or None.
+
+    the owner caught this on a built card: the category read "Devil's Cut" against
+    the answer "B. The devil's cut", so the header answered before the question
+    was read and the four options became decorative.
+
+    The rule is deliberately narrow, because a loose one cries wolf and gets
+    switched off. A shared word only counts if it DISCRIMINATES — that is, it
+    appears in exactly ONE option, and that option is the answer. "Flower Power"
+    against "orange flower water" shares "flower", but two of the four options
+    contain it, so it narrows nothing and is fair.
+
+    With no options there is nothing to disambiguate against, so any meaningful
+    overlap hands the answer over.
+    """
+    shared = _words(question.get("category", "")) & _words(question.get("answer", ""))
+    if not shared:
+        return None
+    options = question.get("options")
+    if not options:
+        return sorted(shared)[0]
+    # Split "A. x B. y C. z" into the individual choices.
+    choices = re.split(r"\s(?=[A-D][).]\s)", str(options).strip())
+    for word in sorted(shared):
+        if sum(1 for c in choices if word in c.lower()) == 1:
+            return word
+    return None
+
+
+def _candidates(
+    available: list[dict],
+    round_no: int,
+    used: set[str],
+    band: tuple | list | None = None,
+) -> list[dict]:
+    band = band if band is not None else RUNG_DIFFICULTY[round_no]
     return [q for q in available if q["difficulty"] in band and q["id"] not in used]
 
 
@@ -137,7 +183,7 @@ def _row(round_no: int, question: dict, source: str) -> dict:
 
     ``options`` is carried when present and OMITTED when not — short-answer is a
     real format in this show, and an empty dict would render four blank cards.
-    One episode is why this field exists at all: the A-D texts lived only
+    one episode's row is why this field exists at all: the A-D texts lived only
     in kai-studio's ledger while ops held a bare stem, so neither file alone
     could produce a card.
     """
@@ -165,6 +211,15 @@ def build(spec: dict, pool: list[dict], ledger: dict) -> dict:
     # all-hip-hop set for a guest who asked for a blend. Reordering the flat
     # list could not fix it, because rank is global while the need is per rung.
     by_round = {int(k): v for k, v in spec.get("themes_by_round", {}).items()}
+    # Per-rung difficulty override. The bible's bands assume a GENERAL guest; a
+    # subject-matter expert makes them wrong. an expert guest is a subject-matter expert, so a
+    # difficulty-3 spirits question is a gimme at the $10 rung. Shifting the
+    # bands up moves WHICH difficulty each rung draws — the money ladder and the
+    # gummies do not move, because those are the show, not the calibration.
+    bands = {int(k): tuple(v) for k, v in spec.get("difficulty_by_round", {}).items()}
+    # Rejected FOR THIS GUEST, without being spent. A question that is wrong for
+    # one contestant is usually fine for another, so exclusion must not burn it.
+    excluded = set(spec.get("exclude", []))
     authored = {a["round"]: a for a in spec.get("authored", [])}
 
     rows: list[dict] = []
@@ -175,8 +230,10 @@ def build(spec: dict, pool: list[dict], ledger: dict) -> dict:
         if round_no in authored:
             rows.append(_row(round_no, authored[round_no], "authored"))
             continue
+        pool_for_rung = [q for q in available if q["id"] not in excluded]
         choice = _pick(
-            _candidates(available, round_no, used), by_round.get(round_no, terms)
+            _candidates(pool_for_rung, round_no, used, bands.get(round_no)),
+            by_round.get(round_no, terms),
         )
         if choice is None:
             unfillable.append(round_no)
@@ -186,6 +243,15 @@ def build(spec: dict, pool: list[dict], ledger: dict) -> dict:
 
     if unfillable:
         raise UnfillableRung(unfillable)
+
+    for row in rows:
+        leak = category_leak(row)
+        if leak:
+            raise CategoryLeak(
+                f"round {row['round']} category {row['category']!r} gives away its own "
+                f"answer {row['answer']!r} (shared discriminating word: {leak!r}). "
+                f"Rename the category — the options are there to make the guest choose."
+            )
 
     return {
         "episode": spec["episode"],

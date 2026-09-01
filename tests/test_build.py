@@ -328,3 +328,173 @@ def test_rungs_without_an_override_still_use_the_global_themes() -> None:
         q["round"]: q for q in bq_build.build(spec, _pool(), _ledger())["questions"]
     }
     assert picked[1]["text"] == "What sound does a dog make?"
+
+
+# ── expert calibration ──────────────────────────────────────────────────────
+# The show bible's difficulty bands assume a GENERAL guest. an expert guest bartends for a
+# living, so a difficulty-3 spirits question is a gimme at the $10 rung — the owner,
+# reviewing the built set: "the ethan questions are too easy... bump everything
+# up a tier". The money ladder and the gummies do not move; only which
+# difficulty each rung draws from.
+
+
+def test_a_spec_can_shift_the_difficulty_band_for_a_rung() -> None:
+    deck = "\n\n".join(
+        [
+            "Easy A 1\nan easy one?\na",
+            "Mid B 2\na mid one?\na",
+            "Hard C 3\na hard one?\na",
+        ]
+    )
+    spec = _spec(
+        themes=["one"],
+        difficulty_by_round={"1": [2]},  # $1 rung draws difficulty 2, not 1-2
+        authored=[
+            {"round": r, "category": "C", "text": f"q{r}", "answer": "a"}
+            for r in (2, 3, 4, 5)
+        ],
+    )
+    row = next(
+        q
+        for q in bq_build.build(spec, bq_pool.parse_deck(deck), _ledger())["questions"]
+        if q["round"] == 1
+    )
+    assert row["text"] == "a mid one?"
+
+
+def test_rungs_without_a_band_override_keep_the_bible_default() -> None:
+    spec = _spec(difficulty_by_round={"1": [2]})
+    picked = {
+        q["round"]: q for q in bq_build.build(spec, _pool(), _ledger())["questions"]
+    }
+    assert picked[4]["text"] == "How far is the moon?"  # still the difficulty-4 band
+
+
+def test_an_excluded_question_is_never_picked() -> None:
+    """A question can be rejected FOR A GUEST without being spent. Killing the
+    Negroni from an expert guest's set must not burn it — it is a fine question for
+    someone who does not bartend."""
+    pool = _pool()
+    doomed = next(q for q in pool if q["text"] == "What sound does a dog make?")
+    # Rungs 2-5 are pinned so only rung 1 draws from the deck; otherwise the
+    # tiny fixture starves and we would be testing UnfillableRung, not exclusion.
+    spec = _spec(
+        exclude=[doomed["id"]],
+        authored=[
+            {"round": r, "category": "C", "text": f"q{r}", "answer": "a"}
+            for r in (2, 3, 4, 5)
+        ],
+    )
+    built = bq_build.build(spec, pool, _ledger())
+    assert all(q["source"] != doomed["id"] for q in built["questions"])
+
+
+def test_excluding_a_question_does_not_mark_it_spent() -> None:
+    """Exclusion is per-episode preference, not a ledger burn."""
+    pool = _pool()
+    doomed = next(q for q in pool if q["text"] == "What sound does a dog make?")
+    bq_build.build(
+        _spec(
+            exclude=[doomed["id"]],
+            authored=[
+                {"round": r, "category": "C", "text": f"q{r}", "answer": "a"}
+                for r in (2, 3, 4, 5)
+            ],
+        ),
+        pool,
+        _ledger(),
+    )
+    still = bq_pool.availability(pool, _ledger())["available"]
+    assert any(q["id"] == doomed["id"] for q in still)
+
+
+# ── the category must not give away the answer ──────────────────────────────
+# the owner caught this on a built card: the category read "Devil's Cut" and the
+# answer was "B. The devil's cut". The header answered before the question was
+# read, which makes the four options decorative.
+#
+# The rule has to be precise or it cries wolf. A shared word only matters if it
+# DISCRIMINATES: "devil's" appeared in exactly one option (the right one), so it
+# gave the game away. "Flower Power" against "orange flower water" shares
+# "flower", but so do TWO of the four options — it narrows nothing and must NOT
+# be flagged.
+
+
+def _q(category, answer, options=None):
+    return {"category": category, "answer": answer, "text": "t", "options": options}
+
+
+def test_a_category_naming_the_only_matching_option_is_a_leak() -> None:
+    leak = bq_build.category_leak(
+        _q(
+            "Devil's Cut",
+            "B. The devil's cut",
+            "A. The cooper's cut B. The devil's cut C. The barrel share D. The stave loss",
+        )
+    )
+    assert leak == "devil's"
+
+
+def test_a_word_shared_by_several_options_is_not_a_leak() -> None:
+    """Flower Power. 'flower' appears in two options, so it discriminates
+    nothing and the category is fair."""
+    assert (
+        bq_build.category_leak(
+            _q(
+                "Flower Power",
+                "B. Orange flower water",
+                "A. Rose water B. Orange flower water C. Elderflower cordial D. Lavender extract",
+            )
+        )
+        is None
+    )
+
+
+def test_a_short_answer_question_leaks_on_any_shared_word() -> None:
+    """With no options there is nothing to disambiguate against, so any overlap
+    between category and answer hands it over."""
+    assert bq_build.category_leak(_q("Badger Dog", "Badger dog")) == "badger"
+
+
+def test_an_unrelated_category_is_clean() -> None:
+    assert bq_build.category_leak(_q("Old Money", "A. The Saluki")) is None
+
+
+def test_stopwords_in_common_do_not_count_as_a_leak() -> None:
+    assert bq_build.category_leak(_q("The Full Monty", "The three Barrys")) is None
+
+
+def test_build_refuses_a_spec_whose_authored_question_leaks() -> None:
+    """Fail at build time, a week out — not on camera."""
+    spec = _spec(
+        authored=[
+            {
+                "round": 1,
+                "category": "Basenji",
+                "text": "which breed yodels?",
+                "answer": "The Basenji",
+            }
+        ]
+    )
+    with pytest.raises(bq_build.CategoryLeak) as exc:
+        bq_build.build(spec, _pool(), _ledger())
+    assert "basenji" in str(exc.value).lower()
+
+
+def test_a_freshly_built_set_never_leaks_a_category() -> None:
+    """The live guard, against a set built from the shipped sample deck rather
+    than a fixture — if any shipped question's category gave away its answer,
+    build() would refuse and this would raise instead of asserting."""
+    import json
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    deck = bq_pool.parse_deck((root / "data/sample-deck.txt").read_text())
+    ledger = json.loads((root / "data/sample-ledger.json").read_text())
+    episode = bq_build.build(
+        {"episode": "qa", "guest": "QA", "themes": ["dog", "breed"]}, deck, ledger
+    )
+    for row in episode["questions"]:
+        assert bq_build.category_leak(row) is None, (
+            f"R{row['round']} category {row['category']!r} gives away {row['answer']!r}"
+        )

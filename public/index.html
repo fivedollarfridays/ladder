@@ -86,15 +86,23 @@ async function call(op, {body, params} = {}) {
   return res.json();
 }
 
-const TIER_LABEL = {1: "$1", 2: "$5", 3: "$10", 4: "$20", 5: "$50", DoN: "double"};
 
 async function paintReport() {
   const r = await call("report");
   const dry = new Set(r.exhausted_tiers || []);
-  document.getElementById("rungs").innerHTML = Object.entries(r.by_tier)
-    .map(([tier, n]) =>
-      `<div class="rung${dry.has(tier) ? " dry" : ""}"><b>${n}</b><span>tier ${tier}</span></div>`)
-    .join("");
+  // Built with createElement rather than innerHTML: the tier keys come from the
+  // deck's own difficulty field, so they are server-controlled rather than
+  // user-supplied — but "server-controlled" is not "trusted", and a crafted
+  // deck should not be able to reach the DOM as markup.
+  const rungs = document.getElementById("rungs");
+  rungs.replaceChildren(...Object.entries(r.by_tier).map(([tier, n]) => {
+    const el = document.createElement("div");
+    el.className = "rung" + (dry.has(tier) ? " dry" : "");
+    const b = document.createElement("b"); b.textContent = n;
+    const s = document.createElement("span"); s.textContent = `tier ${tier}`;
+    el.append(b, s);
+    return el;
+  }));
   document.getElementById("totals").textContent =
     `${r.available} available of ${r.deck_size} · ${r.spent} spent` +
     (r.exhausted_tiers.length ? ` · EXHAUSTED: ${r.exhausted_tiers.join(", ")}` : " · every rung has options");

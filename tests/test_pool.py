@@ -230,12 +230,10 @@ def test_a_fresh_candidate_passes_screening() -> None:
 def test_the_real_deck_parses_into_a_usable_pool() -> None:
     pool = bq_pool.parse_deck(DECK.read_text())
     assert len(pool) >= 20, f"sample deck parsed to only {len(pool)} questions"
-    assert all(q["text"] for q in pool)
-    # every rung the format uses must be stocked, or the sample cannot
-    # demonstrate a build at all
-    tiers = {q["difficulty"] for q in pool}
+    tiers = {x["difficulty"] for x in pool}
     for rung in (1, 2, 3, 4, 5, "DoN"):
         assert rung in tiers, f"sample deck has nothing at tier {rung}"
+    assert all(q["text"] for q in pool)
 
 
 @pytest.mark.skipif(

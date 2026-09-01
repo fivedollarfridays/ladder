@@ -48,7 +48,7 @@ simply don't register if `document.modelContext` is absent.
 ## Run it
 
 ```bash
-python3 -m pytest tests/ -q     # 46 tests, no runtime dependencies
+python3 -m pytest tests/ -q     # 57 tests, no runtime dependencies
 vercel dev                      # api/ + public/
 ```
 

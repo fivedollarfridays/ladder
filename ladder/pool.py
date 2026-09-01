@@ -9,17 +9,10 @@ full and still be empty at the one rung tonight needs.
 This module supplies the missing half: the deck lives in the repo, and
 availability is `deck - reserved - burned`, computed PER DIFFICULTY RUNG.
 
-TWO THINGS THIS GETS RIGHT ON PURPOSE
--------------------------------------
-**Availability is per RUNG.** A format with one question per difficulty tier
-runs dry a rung at a time, not all at once. 80 questions left is still a dead
-end if tonight needs a tier 5 and all 80 are tier 2. A global count calls that
-healthy.
-
-**Matching is fuzzy, and errs toward "already used".** Ledgers are hand-typed and
-paraphrase; decks carry full setups and smart quotes. Literal matching reads
-spent questions as available — an error in the direction that costs a take.
-Token containment over stopword-stripped text catches the drift.
+Matching is fuzzy on purpose and errs toward "already used". Ledgers are
+hand-typed and paraphrase; decks carry full setups and smart quotes. Literal
+matching reads spent questions as available — an error in the direction that
+costs a take.
 """
 
 
@@ -33,7 +26,7 @@ import re
 TIERS: tuple[int | str, ...] = (1, 2, 3, 4, 5, "DoN")
 
 #: A ledger episode whose status starts with this is BACK in the pool. the owner
-#: questions the owner has requeued are spendable
+#: requeued the the prior show set on 2026-08-18; those questions are spendable
 #: again and must not read as spent.
 _REQUEUED = "requeued"
 
@@ -60,7 +53,14 @@ _MATCH_THRESHOLD = 0.7
 
 
 def normalize(text: str) -> str:
-    """Case-, punctuation- and smart-quote-insensitive form used for matching."""
+    """Case-, punctuation- and smart-quote-insensitive form used for matching.
+
+    Tolerates None and non-strings: this is reached from an HTTP surface where a
+    caller can send anything, and a crash on `null` would turn a bad request
+    into a 500. Junk normalises to the empty string, which matches nothing.
+    """
+    if not isinstance(text, str):
+        return ""
     text = text.replace("’", "'").replace("‘", "'")
     text = text.replace("“", '"').replace("”", '"')
     return " ".join(_WORD_RE.findall(text.lower()))
